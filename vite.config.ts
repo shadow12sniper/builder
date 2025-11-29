@@ -8,8 +8,9 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     define: {
-      // Explicitly define process.env.API_KEY using the value from the .env file
-      'process.env.API_KEY': JSON.stringify(env.API_KEY || process.env.API_KEY),
+      // Explicitly define process.env.API_KEY.
+      // We check the .env file first, but fall back to the provided key to ensure it works immediately.
+      'process.env.API_KEY': JSON.stringify(env.API_KEY || "AIzaSyAl3PFnwdhr8jNXOiOFCoxEpNaTq05QUX4"),
     },
     server: {
       host: true
