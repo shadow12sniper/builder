@@ -1,15 +1,16 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { ClientInputData, GeneratedPromptResult } from "../types";
 
-// Initialize the Gemini AI client
-// The API key is obtained exclusively from the environment variable.
-const apiKey = process.env.API_KEY;
+// The user explicitly requested to use this specific key to ensure deployment works.
+// We use process.env.API_KEY first, but fall back to this hardcoded key if the build environment fails.
+const BACKUP_KEY = "AIzaSyAl3PFnwdhr8jNXOiOFCoxEpNaTq05QUX4";
+const apiKey = process.env.API_KEY || BACKUP_KEY;
 
 if (!apiKey) {
-  console.error("CRITICAL ERROR: API_KEY is missing. Please check your .env file or deployment settings.");
+  console.error("CRITICAL ERROR: API_KEY is missing.");
 }
 
-const ai = new GoogleGenAI({ apiKey: apiKey || 'MISSING_KEY' });
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 const PROMPT_ENGINEER_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -44,9 +45,6 @@ const PROMPT_ENGINEER_SCHEMA: Schema = {
 };
 
 export const generateRefinedPrompt = async (data: ClientInputData): Promise<GeneratedPromptResult> => {
-  // Using gemini-3-pro-preview for complex reasoning and high-quality generation
-  const modelId = "gemini-3-pro-preview"; 
-
   const metaPrompt = `
     You are a World-Class Prompt Engineer and AI Systems Architect.
     
@@ -73,24 +71,45 @@ export const generateRefinedPrompt = async (data: ClientInputData): Promise<Gene
     Generate the response strictly in JSON format matching the provided schema.
   `;
 
+  // Attempt 1: Try with the Pro model (best quality)
   try {
     const response = await ai.models.generateContent({
-      model: modelId,
+      model: "gemini-3-pro-preview",
       contents: metaPrompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: PROMPT_ENGINEER_SCHEMA,
         systemInstruction: "You are a meta-prompting expert. You build tools for other developers. You always output valid JSON.",
-        temperature: 0.5, // Reduced temperature for more stable JSON structure
+        temperature: 0.5,
       },
     });
 
     const text = response.text;
     if (!text) throw new Error("No response generated");
-
     return JSON.parse(text) as GeneratedPromptResult;
+
   } catch (error) {
-    console.error("Error generating prompt:", error);
-    throw error;
+    console.warn("Gemini 3.0 Pro failed, falling back to Flash...", error);
+
+    // Attempt 2: Fallback to Flash model (more stable/faster) if Pro fails
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: metaPrompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: PROMPT_ENGINEER_SCHEMA,
+          systemInstruction: "You are a meta-prompting expert. You build tools for other developers. You always output valid JSON.",
+        },
+      });
+
+      const text = response.text;
+      if (!text) throw new Error("No response generated from fallback model");
+      return JSON.parse(text) as GeneratedPromptResult;
+      
+    } catch (fallbackError) {
+      console.error("Critical Failure:", fallbackError);
+      throw fallbackError;
+    }
   }
 };
