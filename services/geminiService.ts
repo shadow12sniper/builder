@@ -3,7 +3,13 @@ import { ClientInputData, GeneratedPromptResult } from "../types";
 
 // Initialize the Gemini AI client
 // The API key is obtained exclusively from the environment variable.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey = process.env.API_KEY;
+
+if (!apiKey) {
+  console.error("CRITICAL ERROR: API_KEY is missing. Please check your .env file or deployment settings.");
+}
+
+const ai = new GoogleGenAI({ apiKey: apiKey || 'MISSING_KEY' });
 
 const PROMPT_ENGINEER_SCHEMA: Schema = {
   type: Type.OBJECT,
