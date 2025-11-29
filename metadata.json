@@ -1,0 +1,5 @@
+{
+  "name": "MetaPrompt Studio",
+  "description": "A sophisticated tool for developers and freelancers to convert raw client messages into high-quality, structured LLM prompts using Gemini.",
+  "requestFramePermissions": []
+}
