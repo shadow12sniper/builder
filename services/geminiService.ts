@@ -1,16 +1,9 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { ClientInputData, GeneratedPromptResult } from "../types";
 
-// The user explicitly requested to use this specific key to ensure deployment works.
-// We use process.env.API_KEY first, but fall back to this hardcoded key if the build environment fails.
-const BACKUP_KEY = "AIzaSyAl3PFnwdhr8jNXOiOFCoxEpNaTq05QUX4";
-const apiKey = process.env.API_KEY || BACKUP_KEY;
-
-if (!apiKey) {
-  console.error("CRITICAL ERROR: API_KEY is missing.");
-}
-
-const ai = new GoogleGenAI({ apiKey: apiKey });
+// NOTE: In a production environment, it is recommended to move this API call to a backend server
+// to keep your API key secure. However, for this specific preview/demo application, we are using 
+// the client-side SDK with the key injected via build-time environment variables.
 
 const PROMPT_ENGINEER_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -45,6 +38,14 @@ const PROMPT_ENGINEER_SCHEMA: Schema = {
 };
 
 export const generateRefinedPrompt = async (data: ClientInputData): Promise<GeneratedPromptResult> => {
+  const apiKey = process.env.API_KEY;
+
+  if (!apiKey) {
+    throw new Error("API_KEY_MISSING");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
   const metaPrompt = `
     You are a World-Class Prompt Engineer and AI Systems Architect.
     

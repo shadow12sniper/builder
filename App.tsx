@@ -20,9 +20,13 @@ const App: React.FC = () => {
       setResult(generated);
       // On mobile, auto-switch to output tab when done
       setActiveTab('output');
-    } catch (err) {
-      setError("Failed to generate prompt. Please check your API key or try again.");
+    } catch (err: any) {
       console.error(err);
+      if (err.message === 'API_KEY_MISSING') {
+        setError("API Key is missing. Please check your environment variables or configuration.");
+      } else {
+        setError("Failed to generate prompt. Please check your API key validity or try again.");
+      }
     } finally {
       setIsLoading(false);
     }
