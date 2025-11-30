@@ -1,116 +1,75 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { ClientInputData, GeneratedPromptResult } from "../types";
 
-// NOTE: In a production environment, it is recommended to move this API call to a backend server
-// to keep your API key secure. However, for this specific preview/demo application, we are using 
-// the client-side SDK with the key injected via build-time environment variables.
-
-const PROMPT_ENGINEER_SCHEMA: Schema = {
-  type: Type.OBJECT,
-  properties: {
-    title: {
-      type: Type.STRING,
-      description: "A short, catchy title for this prompt strategy.",
-    },
-    roleDefinition: {
-      type: Type.STRING,
-      description: "The persona or role the AI should adopt (e.g., 'Senior React Engineer', 'Marketing Virtuoso').",
-    },
-    systemInstruction: {
-      type: Type.STRING,
-      description: "The core system instruction that defines the behavior, tone, and constraints of the AI.",
-    },
-    userPromptTemplate: {
-      type: Type.STRING,
-      description: "The template for the user to copy-paste, including placeholders for their specific variables (e.g., {{VARIABLE_NAME}}).",
-    },
-    tips: {
-      type: Type.ARRAY,
-      items: { type: Type.STRING },
-      description: "3-5 tactical tips for the user on how to best use this prompt.",
-    },
-    reasoning: {
-      type: Type.STRING,
-      description: "Brief explanation of why this prompt structure was chosen based on the client message.",
-    },
-  },
-  required: ["title", "roleDefinition", "systemInstruction", "userPromptTemplate", "tips", "reasoning"],
-};
+// Initialize the SDK with the API key from the environment
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const generateRefinedPrompt = async (data: ClientInputData): Promise<GeneratedPromptResult> => {
-  const apiKey = process.env.API_KEY;
-
-  if (!apiKey) {
-    throw new Error("API_KEY_MISSING");
+  if (!process.env.API_KEY) {
+    throw new Error("API Key is missing. Please check your environment variables.");
   }
 
-  const ai = new GoogleGenAI({ apiKey });
+  const schema: Schema = {
+    type: Type.OBJECT,
+    properties: {
+      title: { type: Type.STRING, description: "A short, catchy title for this prompt strategy." },
+      roleDefinition: { type: Type.STRING, description: "The persona or role the AI should adopt." },
+      systemInstruction: { type: Type.STRING, description: "The core system instruction that defines behavior, tone, and constraints." },
+      userPromptTemplate: { type: Type.STRING, description: "The template for the user to copy-paste." },
+      tips: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "3-5 actionable tips for using this prompt."
+      },
+      reasoning: { type: Type.STRING, description: "Brief explanation of why this structure was chosen." }
+    },
+    required: ["title", "roleDefinition", "systemInstruction", "userPromptTemplate", "tips", "reasoning"]
+  };
 
-  const metaPrompt = `
-    You are a World-Class Prompt Engineer and AI Systems Architect.
-    
-    Your task is to analyze a raw message received from a client and convert it into a highly effective, professional LLM prompt structure.
-    
-    **Input Analysis:**
-    - Client Message: "${data.rawMessage}"
-    - Intended Goal: ${data.goal}
-    - Desired Complexity: ${data.complexity}
-    - Additional Context: "${data.additionalContext || 'None'}"
+  const modelId = 'gemini-2.5-flash';
 
-    **Objective:**
-    Create a prompt system that the user can use to satisfy their client's request using an AI model like Gemini or GPT-4.
+  const userContent = `
+    Input: "${data.rawMessage}"
+    Goal: ${data.goal}
+    Complexity: ${data.complexity}
+    Context: "${data.additionalContext || 'None'}"
     
-    **Guidelines:**
-    1. **System Instruction:** Create a robust system instruction that sets constraints, style, format, and avoids common pitfalls.
-    2. **User Prompt Template:** Create a template where the user just needs to plug in specific details. Use {{handlebars}} style for placeholders.
-    3. **Tone:** Professional, precise, and optimized for the specific goal selected.
-    4. **Optimization:** 
-       - If coding: emphasize clean code, typescript, error handling, and best practices.
-       - If writing: emphasize voice, tone, engagement, and structure.
-       - If analysis: emphasize clarity, data structuring, and insight generation.
-
-    Generate the response strictly in JSON format matching the provided schema.
+    Create a robust, professional system instruction and user template based on this request.
   `;
 
-  // Attempt 1: Try with the Pro model (best quality)
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
-      contents: metaPrompt,
+      model: modelId,
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: userContent }]
+        }
+      ],
       config: {
+        systemInstruction: "You are a World-Class Prompt Engineer. Convert client requests into high-quality, structured LLM prompts.",
         responseMimeType: "application/json",
-        responseSchema: PROMPT_ENGINEER_SCHEMA,
-        systemInstruction: "You are a meta-prompting expert. You build tools for other developers. You always output valid JSON.",
-        temperature: 0.5,
-      },
+        responseSchema: schema,
+        temperature: 0.7,
+      }
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response generated");
+    if (!text) {
+      throw new Error("No response generated from the model.");
+    }
+
+    // The SDK with responseSchema guarantees JSON, but we parse carefully just in case
     return JSON.parse(text) as GeneratedPromptResult;
 
-  } catch (error) {
-    console.warn("Gemini 3.0 Pro failed, falling back to Flash...", error);
-
-    // Attempt 2: Fallback to Flash model (more stable/faster) if Pro fails
-    try {
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: metaPrompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: PROMPT_ENGINEER_SCHEMA,
-          systemInstruction: "You are a meta-prompting expert. You build tools for other developers. You always output valid JSON.",
-        },
-      });
-
-      const text = response.text;
-      if (!text) throw new Error("No response generated from fallback model");
-      return JSON.parse(text) as GeneratedPromptResult;
-      
-    } catch (fallbackError) {
-      console.error("Critical Failure:", fallbackError);
-      throw fallbackError;
+  } catch (error: any) {
+    console.error("Gemini API Error:", error);
+    
+    // Provide more user-friendly error messages
+    if (error.message?.includes("API key")) {
+      throw new Error("Invalid API Key. Please check your project settings.");
     }
+    
+    throw new Error(error.message || "Failed to generate prompt. Please try again.");
   }
 };
